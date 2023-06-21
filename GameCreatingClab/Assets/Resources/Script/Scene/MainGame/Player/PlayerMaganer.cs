@@ -60,12 +60,18 @@ public class PlayerMaganer : MonoBehaviour
     }
     [SerializeField, ReadOnly,Header("ゲーム内の現在のキャラステータス")]
     charaState state = charaState.Init;
-    [SerializeField, ReadOnly] charaState stockState = charaState.NONE; //ポーズから戻る際、保持するステータス
-    [SerializeField, ReadOnly]
-    PlayerStatu nowStatus;
+    charaState stockState = charaState.NONE; //ポーズから戻る際、保持するステータス
+    [SerializeField, ReadOnly] PlayerStatu nowStatus;
 
+    private Rigidbody rb;
+    //ジャンプ用
     [SerializeField] private float JumoPower = 30f;
     [SerializeField,ReadOnly] private float nowJumoPower;
+    private bool falling; //落下中フラグ
+    //ジャンプ
+    [SerializeField]float y = 0, y_vel;
+    [SerializeField] float y_vel_max = 35;  //初速度
+    [SerializeField] float y_a1 = 4, y_a2 = 2; //ジャンプアップ中の時の、ダウン中の加速度
 
     [SerializeField, Header("★開発用フラグ")] bool DevelopMode;
     [SerializeField, Header("★開発用\nジャンプ着地判定")] bool RandMode_dev;
@@ -76,6 +82,8 @@ public class PlayerMaganer : MonoBehaviour
 
     private void Start()
     {
+        rb = GetComponent<Rigidbody>();
+
         state = charaState.Init;
         stockState = charaState.NONE;
     }
@@ -117,17 +125,25 @@ public class PlayerMaganer : MonoBehaviour
         nowStatus.Init(configStatus);
         state = charaState.idol;
         stockState = charaState.NONE;
+        RandChecker.cInstance.changeRand(true);
+
+        rb.isKinematic = false;
     }
 
     private void DoIdol(float delta)
     {
         //とりますぐwalkにパスする
         state = charaState.walk;
+        RandChecker.cInstance.changeRand(true);
+
+        rb.isKinematic = false;
     }
 
     private void DoWalk(float delta)
     {
         //カメラとキャラを動かす
+        RandChecker.cInstance.changeRand(true);
+        rb.isKinematic = false;
 
         //カメラが動いてなければ動かす
         if (!CameraManager.cInstance.IsMovingCamera) CameraManager.cInstance.ChangeState(CameraState.moving);
@@ -136,6 +152,12 @@ public class PlayerMaganer : MonoBehaviour
         switch (PlayerInputSystem.cInstance.IsType) 
         {
             case buttonType.Jump:
+                //ジャンプする前の設定代入
+                y_vel = y_vel_max;
+                y = y_vel;
+                falling = false;
+                RandChecker.cInstance.changeRand(false);
+
                 state = charaState.jump;
                 break;
             case buttonType.Attack:
@@ -149,24 +171,68 @@ public class PlayerMaganer : MonoBehaviour
     }
     private void DoJump(float delta)
     {
+        //★時々貫通するのでそれ修正予定
+
         //カメラとキャラを動かす
         //カメラが動いてなければ動かす
         if (!CameraManager.cInstance.IsMovingCamera) CameraManager.cInstance.ChangeState(CameraState.moving);
+        rb.isKinematic = false;
 
-        if(PlayerInputSystem.cInstance.IsType == buttonType.Attack) state = charaState.attack;
-
-        //着地したら入力状態リセット（InputManager->Init）
-        if (DevelopMode && RandMode_dev) //一旦これ
+        //アタックの入力が入ったらattackに切り替え
+        if (PlayerInputSystem.cInstance.IsType == buttonType.Attack)
         {
-            state = charaState.walk;
-            PlayerInputSystem.cInstance.ResetStates();
-
-            if (DevelopMode && RandMode_dev) RandMode_dev = false;
+            falling = true;
+            state = charaState.backjump;
         }
+
+        //上昇
+        //if (!RandChecker.cInstance.IsRanding) //地面についてないとき
+        if(!falling)
+        {
+            //途中でボタンを離した、または頂点に来た時
+            if (y_vel <= 0)
+            {
+                y_vel = 0;
+                falling = true;
+            }
+            else
+            {
+                //ジャンプ
+                y_vel += -y_a1;
+                y = y_vel;
+
+            }
+        }
+        //落下
+        else
+        {
+            //着地したら入力状態リセット（InputManager->Init）
+            //if (DevelopMode && RandMode_dev) //一旦これ
+            if (RandChecker.cInstance.IsRanding)
+            {
+                //着地用に再設定
+                y = 0;
+                falling = false;
+
+                state = charaState.walk;
+                PlayerInputSystem.cInstance.ResetStates();
+
+                if (DevelopMode && RandMode_dev) RandMode_dev = false;
+            }
+            else
+            {
+                y_vel += y_a2;
+                y = -y_vel;
+
+            }
+        }
+        rb.velocity = new Vector2(0, y);
+
     }
 
     private void DoAttack(float delta)
     {
+        rb.isKinematic = false;
         //キャラの前方から斜め上発射弾を一直線上に出す
         //カーソル向きの処理
         //カメラが動いてなければ動かす
@@ -187,6 +253,7 @@ public class PlayerMaganer : MonoBehaviour
 
     private void DoBackJump(float delta = 0)
     {
+        rb.isKinematic = false;
         //バックジャンプ（ジャンプ×アタック）
         //ジャンプ→アタックの順しか受け付けない
 
@@ -211,6 +278,7 @@ public class PlayerMaganer : MonoBehaviour
 
     private void DoPause(float delta = 0)
     {
+        rb.isKinematic = true;
         //ポーズ中　ジャンプや諸々を0にする
         //→この方法でやるなら重力はプログラム操作になる？
         //　→★0621:重力はRighdBodyでやってみることに　ソレの設定を変更する形でやる…
@@ -227,4 +295,12 @@ public class PlayerMaganer : MonoBehaviour
 
     #endregion
 //---
+
+    //落下コード
+    private void Fallout()
+    {
+        //着地したら
+    }
+
+
 }

@@ -78,7 +78,7 @@ public class PlayerInputSystem : MonoBehaviour
     }
     private void Update()
     {
-        Debug.Log("state:"+state +"_type:"+type + "_stocktype:"+stocktype);
+        //Debug.Log("state:"+state +"_type:"+type + "_stocktype:"+stocktype);
         float delta = Time.deltaTime;
         switch (state)
         {
