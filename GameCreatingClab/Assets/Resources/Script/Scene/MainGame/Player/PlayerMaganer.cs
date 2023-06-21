@@ -50,35 +50,35 @@ public class PlayerMaganer : MonoBehaviour
         NONE = 0,
         Init,
         //---
-        idol,
+        idol, //静止中　壁に当たってる中等
         walk,
         jump,
         attack,
-        backjump, //jump & attackで発動
+        jump_attack, //jump & attackで発動
         //ダッシュはjump+attackで可能
         pause,
     }
     [SerializeField, ReadOnly,Header("ゲーム内の現在のキャラステータス")]
     charaState state = charaState.Init;
-    charaState stockState = charaState.NONE; //ポーズから戻る際、保持するステータス
+    [SerializeField,ReadOnly]charaState stockState = charaState.NONE; //ポーズから戻る際、保持するステータス
     [SerializeField, ReadOnly] PlayerStatu nowStatus;
 
     private Rigidbody rb;
     //ジャンプ用
-    [SerializeField] private float JumoPower = 30f;
-    [SerializeField,ReadOnly] private float nowJumoPower;
     private bool falling; //落下中フラグ
-    //ジャンプ
-    [SerializeField]float y = 0, y_vel;
-    [SerializeField] float y_vel_max = 35;  //初速度
-    [SerializeField] float y_a1 = 4, y_a2 = 2; //ジャンプアップ中の時の、ダウン中の加速度
-
-    [SerializeField, Header("★開発用フラグ")] bool DevelopMode;
-    [SerializeField, Header("★開発用\nジャンプ着地判定")] bool RandMode_dev;
-    [SerializeField, Header("★開発用\nアタック終了判定")] bool AttackFin_dev;
-    [SerializeField, Header("★開発用\nポーズ解除判定")] bool Unpause_dev;
+    [SerializeField, ReadOnly] float y = 0, y_vel;
+    [SerializeField, Header("最大のジャンプパワー")] float y_vel_max = 35;  //初速度
+    [SerializeField, Header("ジャンプ（up）の加算値")] float y_a1 = 4;
+    [SerializeField, Header("ジャンプ（down）の加算値")] float y_a2 = 2; //ジャンプアップ中の時の、ダウン中の加速度
+    //アタック
+    [SerializeField] private GameObject bulletObj;
+    private bool ButtelCreate_Once = false; //玉発射したかどうか
+    private float stayTime = 0;//アニメがない内はこれでテキトーにすごす
+    //ジャンプアタック
+    private BulletController CreateBullet = null;
 
     public Transform plTrf => this.transform.parent;
+    public Vector3 plPos_world => this.transform.position;
 
     private void Start()
     {
@@ -98,7 +98,7 @@ public class PlayerMaganer : MonoBehaviour
             case charaState.walk:    DoWalk(delta);   break;
             case charaState.jump:    DoJump(delta);   break;
             case charaState.attack:  DoAttack(delta); break;
-            case charaState.backjump: DoBackJump(delta); break;
+            case charaState.jump_attack: Dojump_attack(delta); break;
             case charaState.pause:   DoPause(delta);  break;
         }
 
@@ -127,12 +127,14 @@ public class PlayerMaganer : MonoBehaviour
         stockState = charaState.NONE;
         RandChecker.cInstance.changeRand(true);
 
+        y = 0;
+        CreateBullet = null;
+
         rb.isKinematic = false;
     }
 
     private void DoIdol(float delta)
     {
-        //とりますぐwalkにパスする
         state = charaState.walk;
         RandChecker.cInstance.changeRand(true);
 
@@ -161,6 +163,10 @@ public class PlayerMaganer : MonoBehaviour
                 state = charaState.jump;
                 break;
             case buttonType.Attack:
+                //アタック前の設定代入
+                stayTime = 0; //待ち時間設定
+                ButtelCreate_Once = false;
+
                 state = charaState.attack;
                 break;
 
@@ -181,8 +187,14 @@ public class PlayerMaganer : MonoBehaviour
         //アタックの入力が入ったらattackに切り替え
         if (PlayerInputSystem.cInstance.IsType == buttonType.Attack)
         {
+            stayTime = 0;
+            ButtelCreate_Once = false;
+
+            //ジャンプの頂点を現在地とする
+            y_vel = 0;
+
             falling = true;
-            state = charaState.backjump;
+            state = charaState.jump_attack;
         }
 
         //上昇
@@ -216,8 +228,6 @@ public class PlayerMaganer : MonoBehaviour
 
                 state = charaState.walk;
                 PlayerInputSystem.cInstance.ResetStates();
-
-                if (DevelopMode && RandMode_dev) RandMode_dev = false;
             }
             else
             {
@@ -242,16 +252,33 @@ public class PlayerMaganer : MonoBehaviour
         //モーション終了でwalkへ以降、入力状態もリセット
 
         if (CameraManager.cInstance.IsMovingCamera) CameraManager.cInstance.ChangeState(CameraState.stop);
-        if (DevelopMode && AttackFin_dev) //一旦これ
-        {
-            state = charaState.walk;
-            PlayerInputSystem.cInstance.ResetStates();
 
-            if (DevelopMode && AttackFin_dev) AttackFin_dev = false;
+        if (!ButtelCreate_Once)
+        {
+            Transform Intantiate_Parent = this.transform.parent;
+            GameObject bullet = Instantiate(bulletObj, Intantiate_Parent); //弾の生成
+
+            ButtelCreate_Once = true;
+            
+        }
+        else
+        {
+            if (stayTime <= 1.0f)
+            {
+                stayTime += delta;
+            }
+            //適当に待ったら
+            //if (DevelopMode && AttackFin_dev) //一旦これ
+            else
+            {
+                stayTime = 0;
+                state = charaState.walk;
+                PlayerInputSystem.cInstance.ResetStates();
+            }
         }
     }
 
-    private void DoBackJump(float delta = 0)
+    private void Dojump_attack(float delta = 0)
     {
         rb.isKinematic = false;
         //バックジャンプ（ジャンプ×アタック）
@@ -265,6 +292,65 @@ public class PlayerMaganer : MonoBehaviour
         　４．着地でstate=walk & 入力状態リセット
          */
 
+
+
+        if (!ButtelCreate_Once)
+        {
+            if (CameraManager.cInstance.IsMovingCamera) CameraManager.cInstance.ChangeState(CameraState.stop);
+            Transform Intantiate_Parent = this.transform.parent;
+            GameObject bullet = Instantiate(bulletObj, Intantiate_Parent); //弾の生成
+            CreateBullet = bullet.GetComponent<BulletController>();
+
+            ButtelCreate_Once = true;
+
+        }
+        else
+        {
+            if (CreateBullet.IsInit) return; //団情報初期設定中は通らない
+
+            //待ち時間
+            if (stayTime <= 1.0f)
+            {
+                stayTime += delta;
+            }
+            
+            //重力落下する
+            //着地したら入力状態リセット（InputManager->Init）
+            if (RandChecker.cInstance.IsRanding)
+            {
+                CameraManager.cInstance.ChangeState(CameraState.stop);
+                y = 0;
+            }
+            else
+            {
+                //落下中
+                if (CreateBullet.getMousePos.x >= Screen.width / 2) 
+                    CameraManager.cInstance.ChangeState(CameraState.back_moving);
+                else
+                    CameraManager.cInstance.ChangeState(CameraState.dash_moving);
+                y_vel += y_a2;
+                y = -y_vel;
+
+            }
+            rb.velocity = new Vector2(0, y);
+
+            //落下と待ち時間が終わったら終了
+            if (stayTime > 1.0f && RandChecker.cInstance.IsRanding)
+            {
+                stayTime = 0;
+                state = charaState.walk;
+                PlayerInputSystem.cInstance.ResetStates();
+
+                //着地用に再設定
+                y = 0;
+                falling = false;
+
+                state = charaState.walk;
+                PlayerInputSystem.cInstance.ResetStates();
+            }   
+        }
+
+        /*
         //最終的にtype=attackになるなら、attackと同じ方法で止まるはず
         if (DevelopMode && AttackFin_dev) //一旦これ
         {
@@ -273,7 +359,7 @@ public class PlayerMaganer : MonoBehaviour
 
             if (DevelopMode && AttackFin_dev) AttackFin_dev = false;
         }
-
+        */
     }
 
     private void DoPause(float delta = 0)
@@ -283,24 +369,15 @@ public class PlayerMaganer : MonoBehaviour
         //→この方法でやるなら重力はプログラム操作になる？
         //　→★0621:重力はRighdBodyでやってみることに　ソレの設定を変更する形でやる…
         if (CameraManager.cInstance.IsMovingCamera) CameraManager.cInstance.ChangeState(CameraState.stop);
-        if (DevelopMode && Unpause_dev) //一旦これ
+
+        if (PlayerInputSystem.cInstance.IsType == buttonType.Unpause)
+        //if (DevelopMode && Unpause_dev) //一旦これ
         {
             state = stockState; //保持したものに変更
             stockState = charaState.NONE;
             PlayerInputSystem.cInstance.Unpause_Stock();//ポーズ解除で入力状態を保持したものに変更
-
-            if (DevelopMode && Unpause_dev) Unpause_dev = false;
         }
     }
 
     #endregion
-//---
-
-    //落下コード
-    private void Fallout()
-    {
-        //着地したら
-    }
-
-
 }

@@ -22,6 +22,8 @@ public class CameraManager : MonoBehaviour
         Init = 0,
         stop,
         moving,
+        dash_moving,
+        back_moving,
         
         none_pause, //stopとは異なり、このモードではすぐさま停止する
     }
@@ -49,7 +51,7 @@ public class CameraManager : MonoBehaviour
     private bool MovingCamera_Dev = false;
 
     //カメラが動作中かどうか
-    public bool IsMovingCamera => DevelopMode ? (MovingCamera_Dev) : state == CameraState.moving;
+    public bool IsMovingCamera => DevelopMode ? (MovingCamera_Dev) : (state == CameraState.moving || state == CameraState.back_moving || state == CameraState.dash_moving);
     //カメラのステータス変更
     public void ChangeState(CameraState _state = CameraState.none_pause) => state = _state;
 
@@ -63,12 +65,15 @@ public class CameraManager : MonoBehaviour
     private void Update()
     {
         float delta = Time.deltaTime;
+        float mul_speed = 2.5f;
         switch (state) 
         {
             case CameraState.Init:   DoInit();        break;
             case CameraState.stop:   DoStop();        break;
-            case CameraState.moving: DoMoving(delta); break;
-            case CameraState.none_pause:  DoPause();       break;
+            case CameraState.moving: DoMoving(delta,moveSpeed); break;
+            case CameraState.dash_moving: DoMoving(delta, moveSpeed * mul_speed); break;
+            case CameraState.back_moving: DoMoving(delta, -(moveSpeed * mul_speed)); break;
+            case CameraState.none_pause:  DoPause();  break;
         }
     }
 
@@ -99,7 +104,7 @@ public class CameraManager : MonoBehaviour
         */
     }
 
-    private void DoMoving(float delta)
+    private void DoMoving(float delta,float speed)
     {
         //カメラとキャラを動かす
         if (IsUsingBezier)
@@ -108,7 +113,7 @@ public class CameraManager : MonoBehaviour
         }
         else if (IsStageParRotate)
         {
-            DoStageParRotateCode(delta);
+            DoStageParRotateCode(delta, speed);
         }
 
         /*
@@ -135,9 +140,10 @@ public class CameraManager : MonoBehaviour
         plMng.plTrf.rotation = pathCreator.path.GetRotationAtDistance(moveDistance, EndOfPathInstruction.Loop); 
     }
 
-    private void DoStageParRotateCode(float delta)
+    private void DoStageParRotateCode(float delta,float speed)
     {
-        nowSpeed += moveSpeed * delta;
+        //float speed = posi ? moveSpeed : -(moveSpeed * 2f);
+        nowSpeed += speed * delta;
 
         StageParentObj.rotation = Quaternion.Euler(0, nowSpeed, 0);
     }

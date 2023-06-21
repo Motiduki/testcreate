@@ -40,6 +40,7 @@ public class PlayerInputSystem : MonoBehaviour
         Dash,
         Attack,
         Pause,
+        Unpause, //ポーズ解除
     }
     [SerializeField, ReadOnly] buttonState state = buttonState.Stundby;
     [SerializeField, ReadOnly] buttonType type = buttonType.NONE;
@@ -47,6 +48,7 @@ public class PlayerInputSystem : MonoBehaviour
 
     public buttonType IsType => type;
     public bool IsStundby() => state == buttonState.Stundby;
+    public bool IsPausing() => type == buttonType.Pause; //ポーズ中か華どうか
     public void ResetStates() //ステートの初期化
     {
         state = buttonState.Stundby;
@@ -93,7 +95,8 @@ public class PlayerInputSystem : MonoBehaviour
             case buttonState.Pushing:
                 break;
         }
-        KeyDown_Keyboard(buttonType.Pause, KeyCode.Escape);
+        if(IsPausing()) KeyDown_Keyboard(buttonType.Unpause, KeyCode.Escape);
+        else KeyDown_Keyboard(buttonType.Pause, KeyCode.Escape);
     }
 
     //---
@@ -102,7 +105,7 @@ public class PlayerInputSystem : MonoBehaviour
         if (Input.GetKeyDown(_code))
         {
             //ポーズに入る前は状態ストック
-            if (_type == buttonType.Pause) stocktype = type;
+            if (_type == buttonType.Pause && type != buttonType.Pause) stocktype = type; //ストックにポーズはいれない
             ChangeType(_type);
         }
     }
